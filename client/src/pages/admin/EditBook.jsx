@@ -1,5 +1,13 @@
-import { useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import {
+  Link,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
 import {
   ArrowLeft,
   BookOpen,
@@ -10,7 +18,10 @@ import {
   FileText,
   Layers3,
   Hash,
+  AlertTriangle,
 } from "lucide-react";
+
+import API from "../../services/api";
 
 const categories = [
   "Technology",
@@ -24,76 +35,95 @@ const categories = [
   "Other",
 ];
 
-const mockBooks = {
-  1: {
-    title: "The Great Gatsby",
-    author: "F. Scott Fitzgerald",
-    description:
-      "A classic American novel exploring wealth, ambition, love, and the illusion of the American Dream.",
-    category: "Classic",
-    totalCopies: 8,
-    availableCopies: 5,
-    cover:
-      "https://covers.openlibrary.org/b/isbn/9780743273565-M.jpg",
-  },
-
-  2: {
-    title: "Atomic Habits",
-    author: "James Clear",
-    description:
-      "A practical guide to building better habits through small, consistent changes and systems.",
-    category: "Self Development",
-    totalCopies: 10,
-    availableCopies: 3,
-    cover:
-      "https://covers.openlibrary.org/b/isbn/9780735211292-M.jpg",
-  },
-
-  3: {
-    title: "Clean Code",
-    author: "Robert C. Martin",
-    description:
-      "A practical guide to writing readable, maintainable, and professional software.",
-    category: "Technology",
-    totalCopies: 7,
-    availableCopies: 0,
-    cover:
-      "https://covers.openlibrary.org/b/isbn/9780132350884-M.jpg",
-  },
-
-  4: {
-    title: "The Psychology of Money",
-    author: "Morgan Housel",
-    description:
-      "An exploration of how people think about money, wealth, risk, and financial decisions.",
-    category: "Finance",
-    totalCopies: 9,
-    availableCopies: 6,
-    cover:
-      "https://covers.openlibrary.org/b/isbn/9780857197689-M.jpg",
-  },
-};
-
 function EditBook() {
   const { id } = useParams();
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
 
-  const book = mockBooks[id] || mockBooks[1];
-
   const [formData, setFormData] = useState({
-    title: book.title,
-    author: book.author,
-    description: book.description,
-    category: book.category,
-    totalCopies: String(book.totalCopies),
-    availableCopies: String(book.availableCopies),
+    title: "",
+    author: "",
+    description: "",
+    category: "",
+    totalCopies: "",
+    availableCopies: "",
   });
 
   const [cover, setCover] = useState(null);
-  const [preview, setPreview] = useState(book.cover);
+  const [preview, setPreview] = useState("");
+
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] =
+    useState(false);
+
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+
+  useEffect(() => {
+    const fetchBook = async () => {
+      try {
+        setLoading(true);
+        setError("");
+
+        const response = await API.get(
+          `/books/${id}`
+        );
+
+        if (!response.data?.success) {
+          throw new Error(
+            response.data?.message ||
+              "Failed to fetch book"
+          );
+        }
+
+        const book =
+          response.data?.book ||
+          response.data?.data;
+
+        if (!book) {
+          throw new Error("Book not found");
+        }
+
+        setFormData({
+          title: book.title || "",
+          author: book.author || "",
+          description:
+            book.description || "",
+          category: book.category || "",
+          totalCopies:
+            book.totalCopies !== undefined
+              ? String(book.totalCopies)
+              : "",
+          availableCopies:
+            book.availableCopies !==
+              undefined
+              ? String(book.availableCopies)
+              : "",
+        });
+
+        setPreview(
+          book.coverImage?.url || ""
+        );
+      } catch (err) {
+        console.error(
+          "Failed to fetch book:",
+          err
+        );
+
+        setError(
+          err.response?.data?.message ||
+            err.message ||
+            "Failed to load book"
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (id) {
+      fetchBook();
+    }
+  }, [id]);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -109,16 +139,36 @@ function EditBook() {
   const handleCoverChange = (event) => {
     const file = event.target.files?.[0];
 
-    if (!file) return;
+    if (!file) {
+      return;
+    }
 
-    if (!file.type.startsWith("image/")) {
-      setError("Please select a valid image file.");
+    const allowedTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+    ];
+
+    if (!allowedTypes.includes(file.type)) {
+      setError(
+        "Only JPG, PNG and WebP image files are allowed."
+      );
+
+      event.target.value = "";
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      setError("Cover image must be smaller than 5MB.");
+      setError(
+        "Cover image must be 5MB or smaller."
+      );
+
+      event.target.value = "";
       return;
+    }
+
+    if (preview?.startsWith("blob:")) {
+      URL.revokeObjectURL(preview);
     }
 
     setCover(file);
@@ -127,51 +177,190 @@ function EditBook() {
   };
 
   const removeCover = () => {
+    if (preview?.startsWith("blob:")) {
+      URL.revokeObjectURL(preview);
+    }
+
     setCover(null);
     setPreview("");
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
+
+    setError("");
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
 
-    const total = Number(formData.totalCopies);
-    const available = Number(formData.availableCopies);
+    setError("");
+
+    if (submitting) {
+      return;
+    }
+
+    const title = formData.title.trim();
+    const description =
+      formData.description.trim();
+
+    const total = Number(
+      formData.totalCopies
+    );
+
+    const available = Number(
+      formData.availableCopies
+    );
 
     if (
-      !formData.title.trim() ||
-      !formData.author.trim() ||
-      !formData.description.trim() ||
+      !title ||
+      !description ||
       !formData.category ||
-      !formData.totalCopies ||
+      formData.totalCopies === "" ||
       formData.availableCopies === ""
     ) {
-      setError("Please complete all required fields.");
-      return;
-    }
-
-    if (total < 1) {
-      setError("Total copies must be at least 1.");
-      return;
-    }
-
-    if (available < 0 || available > total) {
       setError(
-        "Available copies cannot be greater than total copies.",
+        "Please complete all required fields."
       );
       return;
     }
 
-    setSuccess(true);
+    if (
+      !Number.isInteger(total) ||
+      total < 1
+    ) {
+      setError(
+        "Total copies must be a positive whole number."
+      );
+      return;
+    }
 
-    // Backend PUT /api/books/:id will be connected later.
-    setTimeout(() => {
-      navigate("/admin/books");
-    }, 1200);
+    if (
+      !Number.isInteger(available) ||
+      available < 0 ||
+      available > total
+    ) {
+      setError(
+        "Available copies must be a whole number between 0 and total copies."
+      );
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+
+      const data = new FormData();
+
+      data.append("title", title);
+      data.append(
+        "description",
+        description
+      );
+      data.append(
+        "category",
+        formData.category
+      );
+      data.append(
+        "totalCopies",
+        String(total)
+      );
+      data.append(
+        "availableCopies",
+        String(available)
+      );
+
+      /*
+        The current backend Book model does not
+        define an author field.
+
+        The Author field remains in the UI to
+        preserve your existing design, but it is
+        intentionally not sent until the backend
+        model/API is extended to support it.
+      */
+
+      if (cover) {
+        data.append("coverImage", cover);
+      }
+
+      const response = await API.put(
+        `/books/${id}`,
+        data
+      );
+
+      if (!response.data?.success) {
+        throw new Error(
+          response.data?.message ||
+            "Failed to update book"
+        );
+      }
+
+      setSuccess(true);
+
+      setTimeout(() => {
+        navigate("/admin/books");
+      }, 1200);
+    } catch (err) {
+      console.error(
+        "Failed to update book:",
+        err
+      );
+
+      setError(
+        err.response?.data?.message ||
+          err.message ||
+          "Failed to update book"
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-full bg-[#f7f7f4]">
+        <div className="mx-auto flex min-h-[70vh] max-w-6xl items-center justify-center px-5 py-8 sm:px-6 lg:px-8">
+          <div className="text-center">
+            <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-cyan-700" />
+
+            <p className="mt-3 text-sm text-slate-500">
+              Loading book details...
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !formData.title) {
+    return (
+      <div className="min-h-full bg-[#f7f7f4]">
+        <div className="mx-auto flex min-h-[70vh] max-w-6xl items-center justify-center px-5 py-8 sm:px-6 lg:px-8">
+          <section className="w-full max-w-md border border-red-200 bg-white p-6 text-center">
+            <div className="mx-auto flex h-11 w-11 items-center justify-center bg-red-50 text-red-600">
+              <AlertTriangle size={20} />
+            </div>
+
+            <h2 className="mt-4 text-base font-bold text-[#102022]">
+              Unable to load book
+            </h2>
+
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              {error}
+            </p>
+
+            <Link
+              to="/admin/books"
+              className="mt-5 inline-flex items-center gap-2 border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+            >
+              <ArrowLeft size={14} />
+              Back to Books
+            </Link>
+          </section>
+        </div>
+      </div>
+    );
+  }
 
   if (success) {
     return (
@@ -187,7 +376,8 @@ function EditBook() {
             </h1>
 
             <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
-              The book information has been updated.
+              The book information has been
+              updated successfully.
             </p>
 
             <p className="mt-5 text-xs text-slate-400">
@@ -202,7 +392,6 @@ function EditBook() {
   return (
     <div className="min-h-full bg-[#f7f7f4]">
       <div className="mx-auto max-w-6xl px-5 py-8 sm:px-6 lg:px-8">
-
         {/* Header */}
         <section className="mb-7">
           <Link
@@ -223,13 +412,13 @@ function EditBook() {
           </h1>
 
           <p className="mt-2 text-sm text-slate-500">
-            Update the information and inventory details for this book.
+            Update the information and inventory
+            details for this book.
           </p>
         </section>
 
         <form onSubmit={handleSubmit}>
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_330px]">
-
             {/* Information */}
             <section className="border border-slate-200 bg-white">
               <div className="border-b border-slate-100 px-5 py-5 sm:px-6">
@@ -244,14 +433,14 @@ function EditBook() {
                     </h2>
 
                     <p className="mt-0.5 text-xs text-slate-400">
-                      Update the details of the book.
+                      Update the details of the
+                      book.
                     </p>
                   </div>
                 </div>
               </div>
 
               <div className="space-y-5 p-5 sm:p-6">
-
                 <FormField
                   label="Book Title"
                   name="title"
@@ -274,7 +463,9 @@ function EditBook() {
                     className="mb-2 block text-xs font-bold text-slate-600"
                   >
                     Category
-                    <span className="ml-1 text-cyan-700">*</span>
+                    <span className="ml-1 text-cyan-700">
+                      *
+                    </span>
                   </label>
 
                   <select
@@ -288,11 +479,16 @@ function EditBook() {
                       Select a category
                     </option>
 
-                    {categories.map((item) => (
-                      <option key={item} value={item}>
-                        {item}
-                      </option>
-                    ))}
+                    {categories.map(
+                      (item) => (
+                        <option
+                          key={item}
+                          value={item}
+                        >
+                          {item}
+                        </option>
+                      )
+                    )}
                   </select>
                 </div>
 
@@ -302,13 +498,17 @@ function EditBook() {
                     className="mb-2 block text-xs font-bold text-slate-600"
                   >
                     Description
-                    <span className="ml-1 text-cyan-700">*</span>
+                    <span className="ml-1 text-cyan-700">
+                      *
+                    </span>
                   </label>
 
                   <textarea
                     id="description"
                     name="description"
-                    value={formData.description}
+                    value={
+                      formData.description
+                    }
                     onChange={handleChange}
                     rows={7}
                     placeholder="Book description..."
@@ -320,7 +520,9 @@ function EditBook() {
                   <NumberField
                     label="Total Copies"
                     name="totalCopies"
-                    value={formData.totalCopies}
+                    value={
+                      formData.totalCopies
+                    }
                     onChange={handleChange}
                     icon={Layers3}
                   />
@@ -328,7 +530,9 @@ function EditBook() {
                   <NumberField
                     label="Available Copies"
                     name="availableCopies"
-                    value={formData.availableCopies}
+                    value={
+                      formData.availableCopies
+                    }
                     onChange={handleChange}
                     icon={Hash}
                   />
@@ -336,9 +540,11 @@ function EditBook() {
 
                 <div className="border border-amber-100 bg-amber-50 px-4 py-3">
                   <p className="text-xs leading-5 text-amber-800">
-                    If this book currently has borrowed copies, make sure
-                    the inventory numbers remain consistent with active
-                    borrowing records.
+                    If this book currently has
+                    borrowed copies, keep the
+                    inventory numbers consistent
+                    with the active borrowing
+                    records.
                   </p>
                 </div>
               </div>
@@ -358,7 +564,8 @@ function EditBook() {
                     </h2>
 
                     <p className="mt-0.5 text-xs text-slate-400">
-                      Replace the current cover if needed.
+                      Replace the current cover if
+                      needed.
                     </p>
                   </div>
                 </div>
@@ -372,13 +579,18 @@ function EditBook() {
                         src={preview}
                         alt={`${formData.title} cover`}
                         className="h-full w-full object-cover"
+                        onError={(event) => {
+                          event.currentTarget.style.display =
+                            "none";
+                        }}
                       />
                     </div>
 
                     <button
                       type="button"
                       onClick={removeCover}
-                      className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center bg-white text-slate-600 shadow-sm transition hover:bg-red-50 hover:text-red-600"
+                      disabled={submitting}
+                      className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center bg-white text-slate-600 shadow-sm transition hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
                       aria-label="Remove cover"
                     >
                       <X size={16} />
@@ -387,8 +599,11 @@ function EditBook() {
                 ) : (
                   <button
                     type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex aspect-[3/4] w-full flex-col items-center justify-center border border-dashed border-slate-300 bg-slate-50/60 px-5 text-center transition hover:border-cyan-500 hover:bg-cyan-50/30"
+                    onClick={() =>
+                      fileInputRef.current?.click()
+                    }
+                    disabled={submitting}
+                    className="flex aspect-[3/4] w-full flex-col items-center justify-center border border-dashed border-slate-300 bg-slate-50/60 px-5 text-center transition hover:border-cyan-500 hover:bg-cyan-50/30 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <div className="flex h-12 w-12 items-center justify-center bg-white text-slate-400 shadow-sm">
                       <Upload size={20} />
@@ -410,7 +625,9 @@ function EditBook() {
                   ref={fileInputRef}
                   type="file"
                   accept="image/png,image/jpeg,image/webp"
-                  onChange={handleCoverChange}
+                  onChange={
+                    handleCoverChange
+                  }
                   className="hidden"
                 />
 
@@ -425,8 +642,13 @@ function EditBook() {
 
           {/* Error */}
           {error && (
-            <div className="mt-6 border border-red-200 bg-red-50 px-4 py-3 text-xs font-medium leading-5 text-red-700">
-              {error}
+            <div className="mt-6 flex items-start gap-3 border border-red-200 bg-red-50 px-4 py-3 text-xs font-medium leading-5 text-red-700">
+              <AlertTriangle
+                size={15}
+                className="mt-0.5 shrink-0"
+              />
+
+              <span>{error}</span>
             </div>
           )}
 
@@ -441,10 +663,18 @@ function EditBook() {
 
             <button
               type="submit"
-              className="inline-flex items-center justify-center gap-2 bg-[#102022] px-5 py-3 text-xs font-bold text-white transition hover:bg-cyan-800"
+              disabled={submitting}
+              className="inline-flex items-center justify-center gap-2 bg-[#102022] px-5 py-3 text-xs font-bold text-white transition hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <Save size={15} />
-              Save Changes
+              {submitting ? (
+                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+              ) : (
+                <Save size={15} />
+              )}
+
+              {submitting
+                ? "Saving Changes..."
+                : "Save Changes"}
             </button>
           </div>
         </form>
@@ -467,7 +697,10 @@ function FormField({
         className="mb-2 block text-xs font-bold text-slate-600"
       >
         {label}
-        <span className="ml-1 text-cyan-700">*</span>
+
+        <span className="ml-1 text-cyan-700">
+          *
+        </span>
       </label>
 
       <input
@@ -497,7 +730,10 @@ function NumberField({
         className="mb-2 block text-xs font-bold text-slate-600"
       >
         {label}
-        <span className="ml-1 text-cyan-700">*</span>
+
+        <span className="ml-1 text-cyan-700">
+          *
+        </span>
       </label>
 
       <div className="relative">
@@ -511,6 +747,7 @@ function NumberField({
           name={name}
           type="number"
           min="0"
+          step="1"
           value={value}
           onChange={onChange}
           className="h-11 w-full border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none transition focus:border-cyan-700"

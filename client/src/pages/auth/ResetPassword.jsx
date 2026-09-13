@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   ArrowRight,
@@ -10,11 +10,18 @@ import {
   LockKeyhole,
 } from "lucide-react";
 
+import API from "../../services/api";
+import "./auth.css";
+
 function ResetPassword() {
   const { token } = useParams();
+  const navigate = useNavigate();
 
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showPassword, setShowPassword] =
+    useState(false);
+
+  const [showConfirmPassword, setShowConfirmPassword] =
+    useState(false);
 
   const [formData, setFormData] = useState({
     password: "",
@@ -23,6 +30,7 @@ function ResetPassword() {
 
   const [errors, setErrors] = useState({});
   const [submitted, setSubmitted] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -35,14 +43,21 @@ function ResetPassword() {
     setErrors((previous) => ({
       ...previous,
       [name]: "",
+      form: "",
     }));
   };
 
   const validateForm = () => {
     const newErrors = {};
 
+    if (!token) {
+      newErrors.form =
+        "This password reset link is invalid or incomplete.";
+    }
+
     if (!formData.password) {
-      newErrors.password = "Please enter a new password.";
+      newErrors.password =
+        "Please enter a new password.";
     } else if (formData.password.length < 8) {
       newErrors.password =
         "Password must contain at least 8 characters.";
@@ -63,26 +78,51 @@ function ResetPassword() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
 
-    if (!validateForm()) return;
+    if (!validateForm()) {
+      return;
+    }
 
-    /*
-      Backend integration will be added later.
+    try {
+      setIsLoading(true);
 
-      Planned API:
+      setErrors({});
 
-      POST /api/auth/reset-password
+      const response = await API.post(
+        "/auth/reset-password",
+        {
+          token,
+          password: formData.password,
+        }
+      );
 
-      Expected data will include:
-      - token
-      - password
-    */
+      if (response.data.success) {
+        setSubmitted(true);
 
-    console.log("Reset token:", token);
+        setFormData({
+          password: "",
+          confirmPassword: "",
+        });
 
-    setSubmitted(true);
+        return;
+      }
+
+      setErrors({
+        form:
+          response.data.message ||
+          "Unable to reset your password. Please try again.",
+      });
+    } catch (error) {
+      setErrors({
+        form:
+          error.response?.data?.message ||
+          "This reset link may be invalid or expired. Please request a new password reset link.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -99,7 +139,9 @@ function ResetPassword() {
       <div className="auth-container">
 
         {/* LEFT SIDE */}
+
         <section className="auth-intro">
+
           <Link to="/" className="auth-brand">
             <div>
               <strong>LIBRYO</strong>
@@ -108,6 +150,7 @@ function ResetPassword() {
           </Link>
 
           <div className="auth-intro-content">
+
             <div className="auth-kicker">
               <span />
               SECURE ACCOUNT ACCESS
@@ -123,21 +166,27 @@ function ResetPassword() {
               account. Once updated, you can use it to
               securely access your library.
             </p>
+
           </div>
 
           <div className="auth-intro-footer">
             <LockKeyhole size={14} />
             Your account security matters
           </div>
+
         </section>
 
         {/* RIGHT SIDE */}
+
         <section className="auth-card-wrapper">
+
           <div className="auth-card">
 
             {!submitted ? (
               <>
+
                 <div className="auth-card-header">
+
                   <div className="auth-card-icon">
                     <KeyRound size={21} />
                   </div>
@@ -151,6 +200,7 @@ function ResetPassword() {
                       Set a new password
                     </h2>
                   </div>
+
                 </div>
 
                 <p className="auth-card-description">
@@ -165,7 +215,9 @@ function ResetPassword() {
                 >
 
                   {/* PASSWORD */}
+
                   <div className="auth-field">
+
                     <label htmlFor="password">
                       New password
                     </label>
@@ -177,6 +229,7 @@ function ResetPassword() {
                           : ""
                       }`}
                     >
+
                       <LockKeyhole size={18} />
 
                       <input
@@ -191,6 +244,7 @@ function ResetPassword() {
                         onChange={handleChange}
                         placeholder="Enter your new password"
                         autoComplete="new-password"
+                        disabled={isLoading}
                       />
 
                       <button
@@ -198,7 +252,8 @@ function ResetPassword() {
                         className="auth-password-toggle"
                         onClick={() =>
                           setShowPassword(
-                            (previous) => !previous
+                            (previous) =>
+                              !previous
                           )
                         }
                         aria-label={
@@ -206,6 +261,7 @@ function ResetPassword() {
                             ? "Hide password"
                             : "Show password"
                         }
+                        disabled={isLoading}
                       >
                         {showPassword ? (
                           <EyeOff size={18} />
@@ -213,6 +269,7 @@ function ResetPassword() {
                           <Eye size={18} />
                         )}
                       </button>
+
                     </div>
 
                     {errors.password && (
@@ -220,10 +277,14 @@ function ResetPassword() {
                         {errors.password}
                       </span>
                     )}
+
                   </div>
 
+
                   {/* CONFIRM PASSWORD */}
+
                   <div className="auth-field">
+
                     <label htmlFor="confirmPassword">
                       Confirm new password
                     </label>
@@ -235,6 +296,7 @@ function ResetPassword() {
                           : ""
                       }`}
                     >
+
                       <LockKeyhole size={18} />
 
                       <input
@@ -251,6 +313,7 @@ function ResetPassword() {
                         onChange={handleChange}
                         placeholder="Confirm your new password"
                         autoComplete="new-password"
+                        disabled={isLoading}
                       />
 
                       <button
@@ -258,7 +321,8 @@ function ResetPassword() {
                         className="auth-password-toggle"
                         onClick={() =>
                           setShowConfirmPassword(
-                            (previous) => !previous
+                            (previous) =>
+                              !previous
                           )
                         }
                         aria-label={
@@ -266,6 +330,7 @@ function ResetPassword() {
                             ? "Hide password"
                             : "Show password"
                         }
+                        disabled={isLoading}
                       >
                         {showConfirmPassword ? (
                           <EyeOff size={18} />
@@ -273,6 +338,7 @@ function ResetPassword() {
                           <Eye size={18} />
                         )}
                       </button>
+
                     </div>
 
                     {errors.confirmPassword && (
@@ -280,40 +346,75 @@ function ResetPassword() {
                         {errors.confirmPassword}
                       </span>
                     )}
+
                   </div>
 
+
+                  {/* FORM ERROR */}
+
+                  {errors.form && (
+                    <div
+                      className="auth-form-message"
+                      role="alert"
+                    >
+                      {errors.form}
+                    </div>
+                  )}
+
+
                   {/* PASSWORD REQUIREMENT */}
+
                   <div className="auth-form-message">
-                    <strong>Password requirement</strong>
+                    <strong>
+                      Password requirement
+                    </strong>
                     <br />
                     Use at least 8 characters and avoid
                     easily guessable passwords.
                   </div>
 
+
+                  {/* SUBMIT */}
+
                   <button
                     type="submit"
                     className="auth-submit"
+                    disabled={isLoading}
                   >
-                    Update password
-                    <ArrowRight size={17} />
+                    {isLoading
+                      ? "Updating..."
+                      : "Update password"}
+
+                    {!isLoading && (
+                      <ArrowRight size={17} />
+                    )}
                   </button>
+
                 </form>
 
+
                 <div className="auth-register">
-                  <span>Remember your password?</span>
+                  <span>
+                    Remember your password?
+                  </span>
+
                   <Link to="/login">
                     Sign in
                   </Link>
                 </div>
+
               </>
             ) : (
               <>
+
                 {/* SUCCESS STATE */}
+
                 <div className="auth-success-icon">
                   <CheckCircle2 size={25} />
                 </div>
 
                 <div className="auth-success-content">
+
                   <span className="auth-card-label">
                     PASSWORD UPDATED
                   </span>
@@ -327,6 +428,7 @@ function ResetPassword() {
                     successfully updated. You can now
                     sign in using your new password.
                   </p>
+
                 </div>
 
                 <Link
@@ -344,11 +446,14 @@ function ResetPassword() {
                   <ArrowLeft size={16} />
                   Back to Libryo
                 </Link>
+
               </>
             )}
 
           </div>
+
         </section>
+
       </div>
     </main>
   );

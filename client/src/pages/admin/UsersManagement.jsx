@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   BookOpen,
@@ -11,99 +11,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-
-const initialUsers = [
-  {
-    id: "USR-1001",
-    name: "Aarav Sharma",
-    email: "aarav.sharma@example.com",
-    role: "student",
-    joinedDate: "2026-07-12",
-    activeBorrows: 2,
-    status: "Active",
-    initials: "AS",
-  },
-  {
-    id: "USR-1002",
-    name: "Priya Verma",
-    email: "priya.verma@example.com",
-    role: "student",
-    joinedDate: "2026-07-18",
-    activeBorrows: 1,
-    status: "Active",
-    initials: "PV",
-  },
-  {
-    id: "USR-1003",
-    name: "Rohan Mehta",
-    email: "rohan.mehta@example.com",
-    role: "student",
-    joinedDate: "2026-07-25",
-    activeBorrows: 0,
-    status: "Active",
-    initials: "RM",
-  },
-  {
-    id: "USR-1004",
-    name: "Ananya Singh",
-    email: "ananya.singh@example.com",
-    role: "student",
-    joinedDate: "2026-08-02",
-    activeBorrows: 1,
-    status: "Active",
-    initials: "AS",
-  },
-  {
-    id: "USR-1005",
-    name: "Vikram Patel",
-    email: "vikram.patel@example.com",
-    role: "student",
-    joinedDate: "2026-08-08",
-    activeBorrows: 0,
-    status: "Active",
-    initials: "VP",
-  },
-  {
-    id: "USR-1006",
-    name: "Neha Kapoor",
-    email: "neha.kapoor@example.com",
-    role: "student",
-    joinedDate: "2026-08-15",
-    activeBorrows: 1,
-    status: "Active",
-    initials: "NK",
-  },
-  {
-    id: "USR-1007",
-    name: "Kunal Gupta",
-    email: "kunal.gupta@example.com",
-    role: "student",
-    joinedDate: "2026-08-21",
-    activeBorrows: 2,
-    status: "Active",
-    initials: "KG",
-  },
-  {
-    id: "USR-1008",
-    name: "Meera Joshi",
-    email: "meera.joshi@example.com",
-    role: "student",
-    joinedDate: "2026-08-29",
-    activeBorrows: 0,
-    status: "Active",
-    initials: "MJ",
-  },
-  {
-    id: "ADM-0001",
-    name: "Library Administrator",
-    email: "admin@libryo.com",
-    role: "admin",
-    joinedDate: "2026-06-01",
-    activeBorrows: 0,
-    status: "Active",
-    initials: "LA",
-  },
-];
+import API from "../../services/api";
 
 const roleOptions = [
   {
@@ -123,11 +31,45 @@ const roleOptions = [
 const formatDate = (date) => {
   if (!date) return "—";
 
-  return new Date(`${date}T00:00:00`).toLocaleDateString("en-IN", {
+  const parsedDate = new Date(date);
+
+  if (Number.isNaN(parsedDate.getTime())) return "—";
+
+  return parsedDate.toLocaleDateString("en-IN", {
     day: "2-digit",
     month: "short",
     year: "numeric",
   });
+};
+
+const getInitials = (name = "") => {
+  return (
+    name
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((part) => part.charAt(0).toUpperCase())
+      .join("") || "U"
+  );
+};
+
+const normalizeUser = (user) => {
+  const role = user.role || "student";
+
+  const activeBorrows = Number(
+    user.activeBorrowCount ?? user.activeBorrows ?? 0
+  );
+
+  return {
+    id: user._id || user.id,
+    name: user.name || "Unnamed User",
+    email: user.email || "—",
+    role,
+    joinedDate: user.createdAt || user.joinedDate,
+    activeBorrows,
+    status: user.status || "Active",
+    initials: getInitials(user.name),
+  };
 };
 
 function StatCard({ icon: Icon, label, value, description }) {
@@ -181,10 +123,17 @@ function StatusBadge({ status }) {
   );
 }
 
-function DeleteModal({ user, onClose, onConfirm }) {
+function DeleteModal({
+  user,
+  onClose,
+  onConfirm,
+  deleting = false,
+  error = "",
+}) {
   if (!user) return null;
 
   const isAdmin = user.role === "admin";
+  const hasActiveBorrows = user.activeBorrows > 0;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/45 px-4 py-6">
@@ -204,7 +153,8 @@ function DeleteModal({ user, onClose, onConfirm }) {
           <button
             type="button"
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+            disabled={deleting}
+            className="flex h-8 w-8 items-center justify-center text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Close"
           >
             <X size={18} />
@@ -229,6 +179,12 @@ function DeleteModal({ user, onClose, onConfirm }) {
             </div>
           </div>
 
+          {error && (
+            <div className="mt-4 border-l-2 border-red-500 bg-red-50 px-4 py-3">
+              <p className="text-xs leading-5 text-red-700">{error}</p>
+            </div>
+          )}
+
           {isAdmin ? (
             <div className="mt-4 border-l-2 border-red-500 bg-red-50 px-4 py-3">
               <p className="text-xs font-semibold text-red-800">
@@ -236,11 +192,10 @@ function DeleteModal({ user, onClose, onConfirm }) {
               </p>
 
               <p className="mt-1 text-xs leading-5 text-red-700/80">
-                This frontend safeguard prevents accidental removal of the
-                library administrator.
+                The backend also protects administrator accounts from deletion.
               </p>
             </div>
-          ) : user.activeBorrows > 0 ? (
+          ) : hasActiveBorrows ? (
             <div className="mt-4 border-l-2 border-amber-400 bg-amber-50 px-4 py-3">
               <div className="flex gap-2">
                 <AlertTriangle
@@ -255,8 +210,8 @@ function DeleteModal({ user, onClose, onConfirm }) {
 
                   <p className="mt-1 text-xs leading-5 text-amber-700/80">
                     The account currently has {user.activeBorrows} active{" "}
-                    {user.activeBorrows === 1 ? "book" : "books"}. The actual
-                    backend will enforce whether this account can be deleted.
+                    {user.activeBorrows === 1 ? "book" : "books"}. Return those
+                    books before deleting the student account.
                   </p>
                 </div>
               </div>
@@ -265,7 +220,7 @@ function DeleteModal({ user, onClose, onConfirm }) {
             <div className="mt-4 border-l-2 border-red-400 bg-red-50 px-4 py-3">
               <p className="text-xs leading-5 text-red-700">
                 This action will permanently remove the user from the library
-                system. This cannot be undone from the frontend.
+                system. This cannot be undone.
               </p>
             </div>
           )}
@@ -276,19 +231,21 @@ function DeleteModal({ user, onClose, onConfirm }) {
           <button
             type="button"
             onClick={onClose}
-            className="border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+            disabled={deleting}
+            className="border border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Cancel
           </button>
 
           <button
             type="button"
-            disabled={isAdmin || user.activeBorrows > 0}
+            disabled={isAdmin || hasActiveBorrows || deleting}
             onClick={onConfirm}
             className="inline-flex items-center justify-center gap-2 bg-red-600 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
           >
             <Trash2 size={14} />
-            Delete user
+
+            {deleting ? "Deleting..." : "Delete user"}
           </button>
         </div>
       </div>
@@ -297,14 +254,43 @@ function DeleteModal({ user, onClose, onConfirm }) {
 }
 
 export default function UsersManagement() {
-  const [users, setUsers] = useState(initialUsers);
+  const [users, setUsers] = useState([]);
 
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("ALL");
-
   const [showRoleMenu, setShowRoleMenu] = useState(false);
 
   const [selectedUser, setSelectedUser] = useState(null);
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+
+  const fetchUsers = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const response = await API.get("/admin/users");
+
+      const apiUsers = response.data?.users || [];
+
+      setUsers(apiUsers.map(normalizeUser));
+    } catch (err) {
+      setError(
+        err.response?.data?.message ||
+          "Unable to load users. Please try again."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
 
   const filteredUsers = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -342,21 +328,51 @@ export default function UsersManagement() {
     roleOptions.find((option) => option.value === roleFilter)?.label ||
     "All users";
 
-  const handleDelete = () => {
+  const openDeleteModal = (user) => {
+    setDeleteError("");
+    setSelectedUser(user);
+  };
+
+  const closeDeleteModal = () => {
+    if (deleting) return;
+
+    setSelectedUser(null);
+    setDeleteError("");
+  };
+
+  const handleDelete = async () => {
     if (!selectedUser) return;
 
-    if (
-      selectedUser.role === "admin" ||
-      selectedUser.activeBorrows > 0
-    ) {
+    if (selectedUser.role === "admin") {
       return;
     }
 
-    setUsers((current) =>
-      current.filter((user) => user.id !== selectedUser.id)
-    );
+    if (selectedUser.activeBorrows > 0) {
+      setDeleteError(
+        "This student has active borrows and cannot be deleted yet."
+      );
+      return;
+    }
 
-    setSelectedUser(null);
+    try {
+      setDeleting(true);
+      setDeleteError("");
+
+      await API.delete(`/admin/users/${selectedUser.id}`);
+
+      setUsers((current) =>
+        current.filter((user) => user.id !== selectedUser.id)
+      );
+
+      setSelectedUser(null);
+    } catch (err) {
+      setDeleteError(
+        err.response?.data?.message ||
+          "Unable to delete this user. Please try again."
+      );
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -394,33 +410,50 @@ export default function UsersManagement() {
           </div>
         </section>
 
+        {/* ERROR */}
+        {error && (
+          <section className="border-l-2 border-red-500 bg-red-50 px-5 py-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs leading-5 text-red-700">{error}</p>
+
+              <button
+                type="button"
+                onClick={fetchUsers}
+                className="self-start text-xs font-semibold text-red-700 underline underline-offset-2 hover:text-red-800 sm:self-auto"
+              >
+                Retry
+              </button>
+            </div>
+          </section>
+        )}
+
         {/* STATS */}
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard
             icon={Users}
             label="Total users"
-            value={stats.total}
+            value={loading ? "—" : stats.total}
             description="All registered accounts"
           />
 
           <StatCard
             icon={User}
             label="Students"
-            value={stats.students}
+            value={loading ? "—" : stats.students}
             description="Registered student accounts"
           />
 
           <StatCard
             icon={ShieldCheck}
             label="Administrators"
-            value={stats.admins}
+            value={loading ? "—" : stats.admins}
             description="Library admin accounts"
           />
 
           <StatCard
             icon={BookOpen}
             label="Active borrows"
-            value={stats.activeBorrows}
+            value={loading ? "—" : stats.activeBorrows}
             description="Books currently with students"
           />
         </section>
@@ -525,12 +558,22 @@ export default function UsersManagement() {
               </h2>
 
               <p className="mt-1 text-xs text-slate-500">
-                Showing {filteredUsers.length} of {users.length} users
+                {loading
+                  ? "Loading users..."
+                  : `Showing ${filteredUsers.length} of ${users.length} users`}
               </p>
             </div>
           </div>
 
-          {filteredUsers.length === 0 ? (
+          {loading ? (
+            <div className="px-6 py-16 text-center">
+              <div className="mx-auto h-8 w-8 animate-spin border-2 border-slate-200 border-t-cyan-600" />
+
+              <p className="mt-4 text-xs font-medium text-slate-500">
+                Loading registered users...
+              </p>
+            </div>
+          ) : filteredUsers.length === 0 ? (
             <div className="px-6 py-16 text-center">
               <div className="mx-auto flex h-12 w-12 items-center justify-center border border-slate-200 bg-slate-50 text-slate-400">
                 <Search size={20} />
@@ -661,7 +704,7 @@ export default function UsersManagement() {
                           {user.role === "student" ? (
                             <button
                               type="button"
-                              onClick={() => setSelectedUser(user)}
+                              onClick={() => openDeleteModal(user)}
                               className="inline-flex items-center gap-1.5 border border-red-200 px-3 py-2 text-[11px] font-semibold text-red-600 transition hover:bg-red-50"
                             >
                               <Trash2 size={13} />
@@ -752,7 +795,7 @@ export default function UsersManagement() {
                       <div className="mt-3 flex justify-end">
                         <button
                           type="button"
-                          onClick={() => setSelectedUser(user)}
+                          onClick={() => openDeleteModal(user)}
                           className="inline-flex items-center gap-1.5 border border-red-200 px-3 py-2 text-[11px] font-semibold text-red-600 transition hover:bg-red-50"
                         >
                           <Trash2 size={13} />
@@ -781,9 +824,8 @@ export default function UsersManagement() {
               </p>
 
               <p className="mt-1 text-xs leading-5 text-slate-500">
-                Active borrowing records must be considered before deleting a
-                student. The final authorization and deletion rules will be
-                enforced by the backend.
+                Students with active borrowing records cannot be deleted.
+                Administrator accounts are protected by the backend.
               </p>
             </div>
           </div>
@@ -793,8 +835,10 @@ export default function UsersManagement() {
       {/* DELETE MODAL */}
       <DeleteModal
         user={selectedUser}
-        onClose={() => setSelectedUser(null)}
+        onClose={closeDeleteModal}
         onConfirm={handleDelete}
+        deleting={deleting}
+        error={deleteError}
       />
     </>
   );

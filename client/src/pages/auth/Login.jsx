@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import {
   ArrowRight,
@@ -8,7 +7,8 @@ import {
   Mail,
   ShieldCheck,
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 import "./auth.css";
 
 function LoginLogo() {
@@ -21,13 +21,25 @@ function LoginLogo() {
       xmlns="http://www.w3.org/2000/svg"
     >
       <defs>
-        <linearGradient id="authCyan" x1="15" y1="15" x2="85" y2="85">
+        <linearGradient
+          id="authCyan"
+          x1="15"
+          y1="15"
+          x2="85"
+          y2="85"
+        >
           <stop offset="0%" stopColor="#e5ffff" />
           <stop offset="45%" stopColor="#58e4fc" />
           <stop offset="100%" stopColor="#1488a8" />
         </linearGradient>
 
-        <linearGradient id="authMetal" x1="20" y1="20" x2="80" y2="80">
+        <linearGradient
+          id="authMetal"
+          x1="20"
+          y1="20"
+          x2="80"
+          y2="80"
+        >
           <stop offset="0%" stopColor="#ffffff" />
           <stop offset="45%" stopColor="#b5d6e3" />
           <stop offset="70%" stopColor="#f8ffff" />
@@ -35,7 +47,10 @@ function LoginLogo() {
         </linearGradient>
 
         <filter id="authGlow">
-          <feGaussianBlur stdDeviation="2.5" result="blur" />
+          <feGaussianBlur
+            stdDeviation="2.5"
+            result="blur"
+          />
           <feMerge>
             <feMergeNode in="blur" />
             <feMergeNode in="SourceGraphic" />
@@ -102,9 +117,26 @@ function LoginLogo() {
       />
 
       {/* Digital core */}
-      <circle cx="50" cy="28" r="2" fill="#ffffff" />
-      <circle cx="43" cy="32" r="1.5" fill="#62ebff" />
-      <circle cx="57" cy="34" r="1.5" fill="#62ebff" />
+      <circle
+        cx="50"
+        cy="28"
+        r="2"
+        fill="#ffffff"
+      />
+
+      <circle
+        cx="43"
+        cy="32"
+        r="1.5"
+        fill="#62ebff"
+      />
+
+      <circle
+        cx="57"
+        cy="34"
+        r="1.5"
+        fill="#62ebff"
+      />
 
       <path
         d="M50 28L43 32L50 36L57 34L50 28Z"
@@ -116,7 +148,15 @@ function LoginLogo() {
 }
 
 function Login() {
-  const [showPassword, setShowPassword] = useState(false);
+  const navigate = useNavigate();
+  const { login } = useAuth();
+
+  const [showPassword, setShowPassword] =
+    useState(false);
+
+  const [isLoading, setIsLoading] =
+    useState(false);
+
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -143,15 +183,20 @@ function Login() {
     const newErrors = {};
 
     if (!formData.email.trim()) {
-      newErrors.email = "Email address is required.";
+      newErrors.email =
+        "Email address is required.";
     } else if (
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+        formData.email
+      )
     ) {
-      newErrors.email = "Enter a valid email address.";
+      newErrors.email =
+        "Enter a valid email address.";
     }
 
     if (!formData.password) {
-      newErrors.password = "Password is required.";
+      newErrors.password =
+        "Password is required.";
     }
 
     setErrors(newErrors);
@@ -159,37 +204,51 @@ function Login() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
 
     if (!validateForm()) {
       return;
     }
 
-    /*
-      Backend integration will be connected later.
+    try {
+      setIsLoading(true);
 
-      Planned API:
-      POST /api/auth/login
+      setErrors({});
 
-      Body:
-      {
-        email,
-        password
+      const response = await login({
+        email: formData.email.trim(),
+        password: formData.password,
+      });
+
+      if (response.success) {
+        if (response.user.role === "admin") {
+          navigate("/admin/dashboard");
+        } else {
+          navigate("/student/dashboard");
+        }
+
+        return;
       }
 
-      The same login flow will handle both
-      student and admin users.
-    */
-
-    setErrors({
-      form: "Login interface is ready. Authentication will be connected in the integration phase.",
-    });
+      setErrors({
+        form:
+          response.message ||
+          "Login failed. Please try again.",
+      });
+    } catch (error) {
+      setErrors({
+        form:
+          error.response?.data?.message ||
+          "Unable to sign in. Please check your credentials and try again.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <div className="auth-page">
-
       {/* Background architecture */}
       <div className="auth-background-grid" />
       <div className="auth-background-glow auth-glow-one" />
@@ -200,10 +259,8 @@ function Login() {
       <div className="auth-floating-node auth-node-three" />
 
       <main className="auth-container">
-
         {/* Left side */}
         <section className="auth-intro">
-
           <Link to="/" className="auth-brand">
             <LoginLogo />
 
@@ -217,7 +274,6 @@ function Login() {
           </Link>
 
           <div className="auth-intro-content">
-
             <div className="auth-kicker">
               <span />
               CAMPUS LIBRARY ACCESS
@@ -229,30 +285,27 @@ function Login() {
             </h1>
 
             <p>
-              Continue your library journey. Discover books,
-              manage your borrowing and stay connected with
-              your campus library.
+              Continue your library journey.
+              Discover books, manage your borrowing
+              and stay connected with your campus
+              library.
             </p>
-
           </div>
 
           <div className="auth-intro-footer">
             <ShieldCheck size={15} />
+
             <span>
-              Secure access for students and administrators
+              Secure access for students and
+              administrators
             </span>
           </div>
-
         </section>
-
 
         {/* Right side */}
         <section className="auth-card-wrapper">
-
           <div className="auth-card">
-
             <div className="auth-card-header">
-
               <div className="auth-card-icon">
                 <LockKeyhole size={19} />
               </div>
@@ -266,33 +319,30 @@ function Login() {
                   Sign in to Libryo
                 </h2>
               </div>
-
             </div>
 
-
             <p className="auth-card-description">
-              Use your registered email and password to
-              access your library account.
+              Use your registered email and
+              password to access your library
+              account.
             </p>
-
 
             <form
               className="auth-form"
               onSubmit={handleSubmit}
               noValidate
             >
-
               {/* Email */}
-
               <div className="auth-field">
-
                 <label htmlFor="email">
                   Email address
                 </label>
 
                 <div
                   className={`auth-input-wrapper ${
-                    errors.email ? "has-error" : ""
+                    errors.email
+                      ? "has-error"
+                      : ""
                   }`}
                 >
                   <Mail size={17} />
@@ -305,6 +355,7 @@ function Login() {
                     value={formData.email}
                     onChange={handleChange}
                     autoComplete="email"
+                    disabled={isLoading}
                   />
                 </div>
 
@@ -313,16 +364,11 @@ function Login() {
                     {errors.email}
                   </span>
                 )}
-
               </div>
 
-
               {/* Password */}
-
               <div className="auth-field">
-
                 <div className="auth-label-row">
-
                   <label htmlFor="password">
                     Password
                   </label>
@@ -330,12 +376,13 @@ function Login() {
                   <Link to="/forgot-password">
                     Forgot password?
                   </Link>
-
                 </div>
 
                 <div
                   className={`auth-input-wrapper ${
-                    errors.password ? "has-error" : ""
+                    errors.password
+                      ? "has-error"
+                      : ""
                   }`}
                 >
                   <LockKeyhole size={17} />
@@ -343,24 +390,33 @@ function Login() {
                   <input
                     id="password"
                     name="password"
-                    type={showPassword ? "text" : "password"}
+                    type={
+                      showPassword
+                        ? "text"
+                        : "password"
+                    }
                     placeholder="Enter your password"
                     value={formData.password}
                     onChange={handleChange}
                     autoComplete="current-password"
+                    disabled={isLoading}
                   />
 
                   <button
                     type="button"
                     className="password-toggle"
                     onClick={() =>
-                      setShowPassword((previous) => !previous)
+                      setShowPassword(
+                        (previous) =>
+                          !previous
+                      )
                     }
                     aria-label={
                       showPassword
                         ? "Hide password"
                         : "Show password"
                     }
+                    disabled={isLoading}
                   >
                     {showPassword ? (
                       <EyeOff size={17} />
@@ -368,7 +424,6 @@ function Login() {
                       <Eye size={17} />
                     )}
                   </button>
-
                 </div>
 
                 {errors.password && (
@@ -376,36 +431,36 @@ function Login() {
                     {errors.password}
                   </span>
                 )}
-
               </div>
 
-
               {/* Form error */}
-
               {errors.form && (
-                <div className="auth-form-message">
+                <div
+                  className="auth-form-message"
+                  role="alert"
+                >
                   {errors.form}
                 </div>
               )}
 
-
               {/* Submit */}
-
               <button
                 type="submit"
                 className="auth-submit"
+                disabled={isLoading}
               >
-                Sign in
-                <ArrowRight size={17} />
-              </button>
+                {isLoading
+                  ? "Signing in..."
+                  : "Sign in"}
 
+                {!isLoading && (
+                  <ArrowRight size={17} />
+                )}
+              </button>
             </form>
 
-
             {/* Register */}
-
             <div className="auth-register">
-
               <span>
                 Don't have an account?
               </span>
@@ -413,20 +468,17 @@ function Login() {
               <Link to="/signup">
                 Create an account
               </Link>
-
             </div>
 
             <div className="auth-role-note">
               <span className="auth-role-dot" />
-              One secure login for students & administrators
+
+              One secure login for students &
+              administrators
             </div>
-
           </div>
-
         </section>
-
       </main>
-
     </div>
   );
 }

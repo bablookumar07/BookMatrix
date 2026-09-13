@@ -1,5 +1,4 @@
-
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -8,76 +7,182 @@ import {
   CheckCircle2,
   Clock3,
   UserRound,
+  AlertTriangle,
 } from "lucide-react";
 
-const books = [
-  {
-    id: 1,
-    title: "Atomic Habits",
-    author: "James Clear",
-    category: "Self Development",
-    description:
-      "Atomic Habits provides a practical framework for building good habits, breaking bad ones, and making small changes that lead to remarkable results.",
-    totalCopies: 8,
-    availableCopies: 5,
-    publishedYear: "2018",
-    cover:
-      "https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&w=700&q=85",
-  },
-  {
-    id: 2,
-    title: "The Psychology of Money",
-    author: "Morgan Housel",
-    category: "Finance",
-    description:
-      "An exploration of the unusual ways people think about money, wealth, risk, and financial decisions through timeless stories and practical lessons.",
-    totalCopies: 6,
-    availableCopies: 3,
-    publishedYear: "2020",
-    cover:
-      "https://images.unsplash.com/photo-1589998059171-988d887df646?auto=format&fit=crop&w=700&q=85",
-  },
-  {
-    id: 3,
-    title: "Clean Code",
-    author: "Robert C. Martin",
-    category: "Technology",
-    description:
-      "A practical guide to writing clean, readable, maintainable code and developing better software engineering habits.",
-    totalCopies: 5,
-    availableCopies: 0,
-    publishedYear: "2008",
-    cover:
-      "https://images.unsplash.com/photo-1515879218367-8466d910aaa4?auto=format&fit=crop&w=700&q=85",
-  },
-  {
-    id: 4,
-    title: "Deep Work",
-    author: "Cal Newport",
-    category: "Productivity",
-    description:
-      "Deep Work explores the value of focused, distraction-free work and presents strategies for developing concentration in a distracted world.",
-    totalCopies: 7,
-    availableCopies: 4,
-    publishedYear: "2016",
-    cover:
-      "https://images.unsplash.com/photo-1495446815901-a7297e633e8d?auto=format&fit=crop&w=700&q=85",
-  },
-];
+import API from "../../services/api";
 
 function BookDetails() {
   const { id } = useParams();
 
-  const book = books.find(
-    (item) => item.id === Number(id)
-  );
+  const [book, setBook] = useState(null);
 
-  const [showBorrowPanel, setShowBorrowPanel] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState("");
+
+  const [showBorrowPanel, setShowBorrowPanel] =
+    useState(false);
+
   const [dueDate, setDueDate] = useState("");
   const [error, setError] = useState("");
-  const [borrowed, setBorrowed] = useState(false);
 
-  if (!book) {
+  const [borrowed, setBorrowed] = useState(false);
+  const [borrowing, setBorrowing] =
+    useState(false);
+
+  useEffect(() => {
+    const fetchBook = async () => {
+      try {
+        setLoading(true);
+        setFetchError("");
+
+        const response = await API.get(
+          `/books/${id}`
+        );
+
+        if (!response.data?.success) {
+          throw new Error(
+            response.data?.message ||
+              "Book not found"
+          );
+        }
+
+        const apiBook =
+          response.data.book ||
+          response.data.data;
+
+        if (!apiBook) {
+          throw new Error("Book not found");
+        }
+
+        setBook({
+          id: apiBook._id,
+          title: apiBook.title,
+          description:
+            apiBook.description || "",
+          category:
+            apiBook.category || "General",
+          totalCopies: Number(
+            apiBook.totalCopies || 0
+          ),
+          availableCopies: Number(
+            apiBook.availableCopies || 0
+          ),
+          cover:
+            apiBook.coverImage?.url || "",
+          publishedYear:
+            apiBook.publishedYear || "—",
+          author: apiBook.author || "—",
+        });
+      } catch (err) {
+        console.error(
+          "Failed to fetch book:",
+          err
+        );
+
+        setFetchError(
+          err.response?.data?.message ||
+            err.message ||
+            "Failed to load book"
+        );
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchBook();
+  }, [id]);
+
+  const today = new Date()
+    .toISOString()
+    .split("T")[0];
+
+  const isAvailable =
+    book && book.availableCopies > 0;
+
+  const handleBorrow = async () => {
+    if (!dueDate) {
+      setError("Please select a due date.");
+      return;
+    }
+
+    const selectedDate = new Date(
+      `${dueDate}T23:59:59`
+    );
+
+    if (selectedDate <= new Date()) {
+      setError(
+        "Due date must be in the future."
+      );
+      return;
+    }
+
+    try {
+      setBorrowing(true);
+      setError("");
+
+      const response = await API.post(
+        "/borrows",
+        {
+          bookId: book.id,
+          dueDate,
+        }
+      );
+
+      if (!response.data?.success) {
+        throw new Error(
+          response.data?.message ||
+            "Failed to borrow book"
+        );
+      }
+
+      setBorrowed(true);
+      setShowBorrowPanel(false);
+
+      setBook((currentBook) => {
+        if (!currentBook) {
+          return currentBook;
+        }
+
+        return {
+          ...currentBook,
+          availableCopies: Math.max(
+            currentBook.availableCopies - 1,
+            0
+          ),
+        };
+      });
+    } catch (err) {
+      console.error(
+        "Failed to borrow book:",
+        err
+      );
+
+      setError(
+        err.response?.data?.message ||
+          err.message ||
+          "Failed to borrow this book"
+      );
+    } finally {
+      setBorrowing(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <section className="flex min-h-[60vh] items-center justify-center border border-slate-200 bg-white">
+        <div className="text-center">
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-cyan-700" />
+
+          <p className="mt-3 text-sm text-slate-500">
+            Loading book details...
+          </p>
+        </div>
+      </section>
+    );
+  }
+
+  if (fetchError || !book) {
     return (
       <section className="border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
         <div className="mx-auto flex h-12 w-12 items-center justify-center border border-slate-200 bg-slate-50 text-slate-400">
@@ -88,8 +193,9 @@ function BookDetails() {
           Book not found
         </h2>
 
-        <p className="mt-1 text-sm text-slate-500">
-          The book you're looking for doesn't exist.
+        <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-slate-500">
+          {fetchError ||
+            "The book you're looking for doesn't exist."}
         </p>
 
         <Link
@@ -102,31 +208,6 @@ function BookDetails() {
       </section>
     );
   }
-
-  const isAvailable = book.availableCopies > 0;
-
-  const handleBorrow = () => {
-    if (!dueDate) {
-      setError("Please select a due date.");
-      return;
-    }
-
-    setError("");
-
-    /*
-      Backend integration later:
-
-      POST /api/borrows
-
-      {
-        bookId,
-        dueDate
-      }
-    */
-
-    setBorrowed(true);
-    setShowBorrowPanel(false);
-  };
 
   if (borrowed) {
     return (
@@ -144,8 +225,9 @@ function BookDetails() {
         </h2>
 
         <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-slate-500">
-          Your book has been added to your current borrowing
-          list. Please return it by your selected due date.
+          Your book has been added to your current
+          borrowing list. Please return it by your
+          selected due date.
         </p>
 
         <div className="mx-auto mt-6 max-w-sm border border-slate-200 bg-slate-50 p-4 text-left">
@@ -161,14 +243,13 @@ function BookDetails() {
               </p>
 
               <p className="mt-0.5 text-sm font-medium text-slate-800">
-                {new Date(dueDate).toLocaleDateString(
-                  "en-IN",
-                  {
-                    day: "numeric",
-                    month: "long",
-                    year: "numeric",
-                  }
-                )}
+                {new Date(
+                  `${dueDate}T00:00:00`
+                ).toLocaleDateString("en-IN", {
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                })}
               </p>
             </div>
           </div>
@@ -195,7 +276,6 @@ function BookDetails() {
 
   return (
     <div className="space-y-6">
-
       {/* BACK */}
       <Link
         to="/student/books"
@@ -208,21 +288,29 @@ function BookDetails() {
       {/* DETAILS */}
       <section className="border border-slate-200 bg-white">
         <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr]">
-
           {/* COVER */}
           <div className="bg-slate-100 p-5 sm:p-8 lg:p-10">
             <div className="mx-auto aspect-[3/4] max-w-[270px] overflow-hidden shadow-sm">
-              <img
-                src={book.cover}
-                alt={book.title}
-                className="h-full w-full object-cover"
-              />
+              {book.cover ? (
+                <img
+                  src={book.cover}
+                  alt={book.title}
+                  className="h-full w-full object-cover"
+                  onError={(event) => {
+                    event.currentTarget.style.display =
+                      "none";
+                  }}
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center bg-slate-200 text-slate-400">
+                  <BookOpen size={36} />
+                </div>
+              )}
             </div>
           </div>
 
           {/* INFORMATION */}
           <div className="flex flex-col p-6 sm:p-8 lg:p-10">
-
             <div>
               <span className="inline-flex bg-cyan-50 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-cyan-700">
                 {book.category}
@@ -247,13 +335,13 @@ function BookDetails() {
               </p>
 
               <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600">
-                {book.description}
+                {book.description ||
+                  "No description is available for this book."}
               </p>
             </div>
 
             {/* META */}
             <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3">
-
               <div className="border border-slate-200 p-4">
                 <p className="text-[10px] uppercase tracking-wider text-slate-400">
                   Published
@@ -295,7 +383,6 @@ function BookDetails() {
 
             {/* BORROW ACTION */}
             <div className="mt-8 border-t border-slate-100 pt-6">
-
               {!showBorrowPanel ? (
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-2 text-xs text-slate-500">
@@ -303,30 +390,29 @@ function BookDetails() {
                     Maximum 3 active borrowed books
                   </div>
 
-                 {isAvailable ? (
-  <button
-    type="button"
-    onClick={() => {
-      setShowBorrowPanel(true);
-      setError("");
-    }}
-    className="px-3.5 py-2 text-xs font-semibold bg-[#102022] text-white transition hover:bg-cyan-800"
-  >
-    Borrow this book
-  </button>
-) : (
-  <button
-    type="button"
-    disabled
-    className="cursor-not-allowed bg-slate-100 px-3.5 py-2 text-xs font-semibold text-slate-400"
-  >
-    Unavailable
-  </button>
-)}
+                  {isAvailable ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowBorrowPanel(true);
+                        setError("");
+                      }}
+                      className="bg-[#102022] px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-cyan-800"
+                    >
+                      Borrow this book
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled
+                      className="cursor-not-allowed bg-slate-100 px-3.5 py-2 text-xs font-semibold text-slate-400"
+                    >
+                      Unavailable
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="border border-cyan-100 bg-cyan-50/50 p-5">
-
                   <div className="flex items-start gap-3">
                     <CalendarDays
                       size={18}
@@ -339,8 +425,8 @@ function BookDetails() {
                       </h3>
 
                       <p className="mt-1 text-xs leading-5 text-slate-500">
-                        Choose the date when you plan to return
-                        this book.
+                        Choose the date when you plan
+                        to return this book.
                       </p>
                     </div>
                   </div>
@@ -357,22 +443,27 @@ function BookDetails() {
                       id="dueDate"
                       type="date"
                       value={dueDate}
-                      min={
-                        new Date()
-                          .toISOString()
-                          .split("T")[0]
-                      }
+                      min={today}
                       onChange={(event) => {
-                        setDueDate(event.target.value);
+                        setDueDate(
+                          event.target.value
+                        );
                         setError("");
                       }}
                       className="h-11 w-full border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-cyan-600"
                     />
 
                     {error && (
-                      <p className="mt-2 text-xs text-red-600">
-                        {error}
-                      </p>
+                      <div className="mt-2 flex items-start gap-2">
+                        <AlertTriangle
+                          size={14}
+                          className="mt-0.5 shrink-0 text-red-600"
+                        />
+
+                        <p className="text-xs text-red-600">
+                          {error}
+                        </p>
+                      </div>
                     )}
                   </div>
 
@@ -380,18 +471,27 @@ function BookDetails() {
                     <button
                       type="button"
                       onClick={handleBorrow}
-                      className="bg-[#102022] px-5 py-2.5 text-xs font-semibold text-white hover:bg-cyan-800"
+                      disabled={borrowing}
+                      className="inline-flex items-center justify-center gap-2 bg-[#102022] px-5 py-2.5 text-xs font-semibold text-white hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      Confirm borrow
+                      {borrowing && (
+                        <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                      )}
+
+                      {borrowing
+                        ? "Confirming..."
+                        : "Confirm borrow"}
                     </button>
 
                     <button
                       type="button"
+                      disabled={borrowing}
                       onClick={() => {
                         setShowBorrowPanel(false);
+                        setDueDate("");
                         setError("");
                       }}
-                      className="border border-slate-200 bg-white px-5 py-2.5 text-xs font-semibold text-slate-600 hover:border-slate-300"
+                      className="border border-slate-200 bg-white px-5 py-2.5 text-xs font-semibold text-slate-600 hover:border-slate-300 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Cancel
                     </button>

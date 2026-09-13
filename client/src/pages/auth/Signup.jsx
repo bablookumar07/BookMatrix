@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   ArrowRight,
   Eye,
@@ -9,9 +9,20 @@ import {
   UserRound,
 } from "lucide-react";
 
+import API from "../../services/api";
+import "./auth.css";
+
 function Signup() {
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const navigate = useNavigate();
+
+  const [showPassword, setShowPassword] =
+    useState(false);
+
+  const [showConfirmPassword, setShowConfirmPassword] =
+    useState(false);
+
+  const [isLoading, setIsLoading] =
+    useState(false);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -46,21 +57,26 @@ function Signup() {
     const email = formData.email.trim();
 
     if (!name) {
-      newErrors.name = "Please enter your full name.";
+      newErrors.name =
+        "Please enter your full name.";
     } else if (name.length < 2) {
-      newErrors.name = "Name must contain at least 2 characters.";
+      newErrors.name =
+        "Name must contain at least 2 characters.";
     }
 
     if (!email) {
-      newErrors.email = "Please enter your email address.";
+      newErrors.email =
+        "Please enter your email address.";
     } else if (
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
     ) {
-      newErrors.email = "Please enter a valid email address.";
+      newErrors.email =
+        "Please enter a valid email address.";
     }
 
     if (!formData.password) {
-      newErrors.password = "Please create a password.";
+      newErrors.password =
+        "Please create a password.";
     } else if (formData.password.length < 8) {
       newErrors.password =
         "Password must contain at least 8 characters.";
@@ -81,23 +97,59 @@ function Signup() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
 
     if (!validateForm()) {
       return;
     }
 
-    /*
-      Backend integration will be added later.
+    try {
+      setIsLoading(true);
+      setErrors({});
+      setFormMessage("");
 
-      Planned API:
-      POST /api/auth/register
-    */
+      const response = await API.post(
+        "/auth/register",
+        {
+          name: formData.name.trim(),
+          email: formData.email.trim(),
+          password: formData.password,
+        }
+      );
 
-    setFormMessage(
-      "Registration form is ready. Account creation will be connected to the backend during integration."
-    );
+      if (response.data.success) {
+        setFormMessage(
+          "Account created successfully. Redirecting to login..."
+        );
+
+        setFormData({
+          name: "",
+          email: "",
+          password: "",
+          confirmPassword: "",
+        });
+
+        setTimeout(() => {
+          navigate("/login");
+        }, 1000);
+
+        return;
+      }
+
+      setFormMessage(
+        response.data.message ||
+          "Registration failed. Please try again."
+      );
+    } catch (error) {
+      const message =
+        error.response?.data?.message ||
+        "Unable to create your account. Please try again.";
+
+      setFormMessage(message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -128,6 +180,7 @@ function Signup() {
           </Link>
 
           <div className="auth-intro-content">
+
             <div className="auth-kicker">
               <span />
               STUDENT REGISTRATION
@@ -139,10 +192,11 @@ function Signup() {
             </h1>
 
             <p>
-              Create your Libryo account to discover books,
-              manage your borrowing, and stay connected with
-              your campus library.
+              Create your Libryo account to discover
+              books, manage your borrowing, and stay
+              connected with your campus library.
             </p>
+
           </div>
 
           <div className="auth-intro-footer">
@@ -157,9 +211,11 @@ function Signup() {
         ===================================================== */}
 
         <section className="auth-card-wrapper">
+
           <div className="auth-card">
 
             <div className="auth-card-header">
+
               <div className="auth-card-icon">
                 <UserRound size={21} />
               </div>
@@ -169,8 +225,11 @@ function Signup() {
                   NEW ACCOUNT
                 </span>
 
-                <h2>Create your Libryo account</h2>
+                <h2>
+                  Create your Libryo account
+                </h2>
               </div>
+
             </div>
 
             <p className="auth-card-description">
@@ -187,6 +246,7 @@ function Signup() {
               {/* Full Name */}
 
               <div className="auth-field">
+
                 <label htmlFor="name">
                   Full name
                 </label>
@@ -196,6 +256,7 @@ function Signup() {
                     errors.name ? "has-error" : ""
                   }`}
                 >
+
                   <UserRound size={18} />
 
                   <input
@@ -206,7 +267,9 @@ function Signup() {
                     onChange={handleChange}
                     placeholder="Enter your full name"
                     autoComplete="name"
+                    disabled={isLoading}
                   />
+
                 </div>
 
                 {errors.name && (
@@ -214,11 +277,14 @@ function Signup() {
                     {errors.name}
                   </span>
                 )}
+
               </div>
+
 
               {/* Email */}
 
               <div className="auth-field">
+
                 <label htmlFor="email">
                   Email address
                 </label>
@@ -228,6 +294,7 @@ function Signup() {
                     errors.email ? "has-error" : ""
                   }`}
                 >
+
                   <Mail size={18} />
 
                   <input
@@ -238,7 +305,9 @@ function Signup() {
                     onChange={handleChange}
                     placeholder="Enter your email address"
                     autoComplete="email"
+                    disabled={isLoading}
                   />
+
                 </div>
 
                 {errors.email && (
@@ -246,11 +315,14 @@ function Signup() {
                     {errors.email}
                   </span>
                 )}
+
               </div>
+
 
               {/* Password */}
 
               <div className="auth-field">
+
                 <label htmlFor="password">
                   Password
                 </label>
@@ -260,6 +332,7 @@ function Signup() {
                     errors.password ? "has-error" : ""
                   }`}
                 >
+
                   <LockKeyhole size={18} />
 
                   <input
@@ -274,6 +347,7 @@ function Signup() {
                     onChange={handleChange}
                     placeholder="Create a secure password"
                     autoComplete="new-password"
+                    disabled={isLoading}
                   />
 
                   <button
@@ -289,6 +363,7 @@ function Signup() {
                         ? "Hide password"
                         : "Show password"
                     }
+                    disabled={isLoading}
                   >
                     {showPassword ? (
                       <EyeOff size={18} />
@@ -296,6 +371,7 @@ function Signup() {
                       <Eye size={18} />
                     )}
                   </button>
+
                 </div>
 
                 {errors.password && (
@@ -303,11 +379,14 @@ function Signup() {
                     {errors.password}
                   </span>
                 )}
+
               </div>
+
 
               {/* Confirm Password */}
 
               <div className="auth-field">
+
                 <label htmlFor="confirmPassword">
                   Confirm password
                 </label>
@@ -319,6 +398,7 @@ function Signup() {
                       : ""
                   }`}
                 >
+
                   <LockKeyhole size={18} />
 
                   <input
@@ -333,6 +413,7 @@ function Signup() {
                     onChange={handleChange}
                     placeholder="Confirm your password"
                     autoComplete="new-password"
+                    disabled={isLoading}
                   />
 
                   <button
@@ -348,6 +429,7 @@ function Signup() {
                         ? "Hide confirm password"
                         : "Show confirm password"
                     }
+                    disabled={isLoading}
                   >
                     {showConfirmPassword ? (
                       <EyeOff size={18} />
@@ -355,6 +437,7 @@ function Signup() {
                       <Eye size={18} />
                     )}
                   </button>
+
                 </div>
 
                 {errors.confirmPassword && (
@@ -362,31 +445,45 @@ function Signup() {
                     {errors.confirmPassword}
                   </span>
                 )}
+
               </div>
+
 
               {/* Message */}
 
               {formMessage && (
-                <div className="auth-form-message">
+                <div
+                  className="auth-form-message"
+                  role="alert"
+                >
                   {formMessage}
                 </div>
               )}
+
 
               {/* Submit */}
 
               <button
                 type="submit"
                 className="auth-submit"
+                disabled={isLoading}
               >
-                Create account
-                <ArrowRight size={17} />
+                {isLoading
+                  ? "Creating account..."
+                  : "Create account"}
+
+                {!isLoading && (
+                  <ArrowRight size={17} />
+                )}
               </button>
 
             </form>
 
+
             {/* Login */}
 
             <div className="auth-register">
+
               <span>
                 Already have an account?
               </span>
@@ -394,7 +491,9 @@ function Signup() {
               <Link to="/login">
                 Sign in
               </Link>
+
             </div>
+
 
             {/* Role note */}
 
@@ -404,6 +503,7 @@ function Signup() {
             </div>
 
           </div>
+
         </section>
 
       </div>

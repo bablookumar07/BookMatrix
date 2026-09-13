@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -10,7 +10,11 @@ import {
   FileText,
   Layers3,
   Hash,
+  AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
+
+import API from "../../services/api";
 
 const categories = [
   "Technology",
@@ -27,6 +31,7 @@ const categories = [
 function AddBook() {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
+  const previewUrlRef = useRef("");
 
   const [formData, setFormData] = useState({
     title: "",
@@ -39,8 +44,18 @@ function AddBook() {
 
   const [cover, setCover] = useState(null);
   const [preview, setPreview] = useState("");
+
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
+      }
+    };
+  }, []);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -56,68 +71,162 @@ function AddBook() {
   const handleCoverChange = (event) => {
     const file = event.target.files?.[0];
 
-    if (!file) return;
+    if (!file) {
+      return;
+    }
 
-    if (!file.type.startsWith("image/")) {
-      setError("Please select a valid image file.");
+    const allowedTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+    ];
+
+    if (!allowedTypes.includes(file.type)) {
+      setError("Only JPG, PNG and WebP image files are allowed.");
+
+      event.target.value = "";
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      setError("Cover image must be smaller than 5MB.");
+      setError("Cover image must be 5MB or smaller.");
+
+      event.target.value = "";
       return;
     }
 
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+
+    previewUrlRef.current = objectUrl;
+
     setCover(file);
-    setPreview(URL.createObjectURL(file));
+    setPreview(objectUrl);
     setError("");
   };
 
   const removeCover = () => {
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = "";
+    }
+
     setCover(null);
     setPreview("");
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
+
+    setError("");
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
+
+    if (submitting) {
+      return;
+    }
+
+    setError("");
+
+    const title = formData.title.trim();
+    const author = formData.author.trim();
+    const description = formData.description.trim();
+    const category = formData.category;
 
     const total = Number(formData.totalCopies);
     const available = Number(formData.availableCopies);
 
+    // Frontend validation
     if (
-      !formData.title.trim() ||
-      !formData.author.trim() ||
-      !formData.description.trim() ||
-      !formData.category ||
-      !formData.totalCopies ||
-      !formData.availableCopies
+      !title ||
+      !author ||
+      !description ||
+      !category ||
+      formData.totalCopies === "" ||
+      formData.availableCopies === ""
     ) {
       setError("Please complete all required fields.");
       return;
     }
 
-    if (total < 1) {
-      setError("Total copies must be at least 1.");
+    if (!Number.isInteger(total) || total < 1) {
+      setError("Total copies must be a positive whole number.");
       return;
     }
 
-    if (available < 0 || available > total) {
+    if (
+      !Number.isInteger(available) ||
+      available < 0 ||
+      available > total
+    ) {
       setError(
-        "Available copies cannot be greater than total copies.",
+        "Available copies must be a whole number between 0 and total copies."
       );
       return;
     }
 
-    setSuccess(true);
+    try {
+      setSubmitting(true);
 
-    // Backend API will be connected during integration.
-    setTimeout(() => {
-      navigate("/admin/books");
-    }, 1200);
+      const data = new FormData();
+
+      data.append("title", title);
+      data.append("description", description);
+      data.append("category", category);
+      data.append("totalCopies", String(total));
+      data.append("availableCopies", String(available));
+
+      if (cover) {
+        data.append("coverImage", cover);
+      }
+
+      /*
+        IMPORTANT:
+        Author is intentionally not appended.
+
+        Current backend Book model contains:
+        title, description, category,
+        totalCopies, availableCopies,
+        coverImage.
+
+        It does not currently contain an author field.
+      */
+
+      const response = await API.post("/books", data);
+
+      if (!response.data?.success) {
+        throw new Error(
+          response.data?.message || "Failed to add book."
+        );
+      }
+
+      setSuccess(true);
+
+      setTimeout(() => {
+        navigate("/admin/books", { replace: true });
+      }, 1200);
+    } catch (err) {
+      console.error("Create book error:", err);
+
+      const responseData = err.response?.data;
+
+      const backendMessage =
+        responseData?.message ||
+        responseData?.error ||
+        responseData?.errors?.[0]?.message ||
+        (typeof responseData === "string" ? responseData : "") ||
+        err.message ||
+        "Something went wrong while creating the book.";
+
+      setError(backendMessage);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (success) {
@@ -134,7 +243,7 @@ function AddBook() {
             </h1>
 
             <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
-              The book has been added to the library collection.
+              The book has been added to the library collection successfully.
             </p>
 
             <p className="mt-5 text-xs text-slate-400">
@@ -149,8 +258,7 @@ function AddBook() {
   return (
     <div className="min-h-full bg-[#f7f7f4]">
       <div className="mx-auto max-w-6xl px-5 py-8 sm:px-6 lg:px-8">
-
-        {/* Header */}
+        {/* HEADER */}
         <section className="mb-7">
           <Link
             to="/admin/books"
@@ -178,11 +286,10 @@ function AddBook() {
           </div>
         </section>
 
-        {/* Form */}
+        {/* FORM */}
         <form onSubmit={handleSubmit}>
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_330px]">
-
-            {/* Main information */}
+            {/* MAIN INFORMATION */}
             <section className="border border-slate-200 bg-white">
               <div className="border-b border-slate-100 px-5 py-5 sm:px-6">
                 <div className="flex items-center gap-3">
@@ -203,8 +310,7 @@ function AddBook() {
               </div>
 
               <div className="space-y-5 p-5 sm:p-6">
-
-                {/* Title */}
+                {/* TITLE */}
                 <FormField
                   label="Book Title"
                   name="title"
@@ -214,7 +320,7 @@ function AddBook() {
                   required
                 />
 
-                {/* Author */}
+                {/* AUTHOR */}
                 <FormField
                   label="Author"
                   name="author"
@@ -224,7 +330,7 @@ function AddBook() {
                   required
                 />
 
-                {/* Category */}
+                {/* CATEGORY */}
                 <div>
                   <label
                     htmlFor="category"
@@ -241,9 +347,7 @@ function AddBook() {
                     onChange={handleChange}
                     className="h-11 w-full border border-slate-200 bg-white px-3 text-sm text-slate-600 outline-none transition focus:border-cyan-700"
                   >
-                    <option value="">
-                      Select a category
-                    </option>
+                    <option value="">Select a category</option>
 
                     {categories.map((item) => (
                       <option key={item} value={item}>
@@ -253,7 +357,7 @@ function AddBook() {
                   </select>
                 </div>
 
-                {/* Description */}
+                {/* DESCRIPTION */}
                 <div>
                   <label
                     htmlFor="description"
@@ -274,14 +378,13 @@ function AddBook() {
                   />
 
                   <p className="mt-1.5 text-[10px] text-slate-400">
-                    Give students enough information to understand what
-                    the book is about.
+                    Give students enough information to understand what the
+                    book is about.
                   </p>
                 </div>
 
-                {/* Copies */}
+                {/* COPIES */}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-
                   <NumberField
                     label="Total Copies"
                     name="totalCopies"
@@ -299,20 +402,19 @@ function AddBook() {
                     placeholder="e.g. 8"
                     icon={Hash}
                   />
-
                 </div>
 
                 <div className="border border-cyan-100 bg-cyan-50 px-4 py-3">
                   <p className="text-xs leading-5 text-cyan-800">
                     <strong>Copies:</strong> Available copies should never
-                    exceed the total number of copies. When students borrow
-                    or return a book, this value will be updated automatically.
+                    exceed the total number of copies. Borrowing and returning
+                    will update availability automatically.
                   </p>
                 </div>
               </div>
             </section>
 
-            {/* Cover */}
+            {/* COVER */}
             <section className="h-fit border border-slate-200 bg-white">
               <div className="border-b border-slate-100 px-5 py-5">
                 <div className="flex items-center gap-3">
@@ -333,7 +435,6 @@ function AddBook() {
               </div>
 
               <div className="p-5">
-
                 {preview ? (
                   <div className="relative">
                     <div className="aspect-[3/4] overflow-hidden bg-slate-100">
@@ -392,14 +493,29 @@ function AddBook() {
             </section>
           </div>
 
-          {/* Error */}
+          {/* ERROR */}
           {error && (
-            <div className="mt-6 border border-red-200 bg-red-50 px-4 py-3 text-xs font-medium leading-5 text-red-700">
-              {error}
+            <div className="mt-6 flex items-start gap-3 border border-red-200 bg-red-50 px-4 py-3 text-xs font-medium leading-5 text-red-700">
+              <AlertTriangle
+                size={15}
+                className="mt-0.5 shrink-0"
+              />
+
+              <div className="min-w-0 flex-1">
+                <p>{error}</p>
+
+                <button
+                  type="button"
+                  onClick={() => setError("")}
+                  className="mt-1 text-[11px] font-semibold underline underline-offset-2"
+                >
+                  Dismiss
+                </button>
+              </div>
             </div>
           )}
 
-          {/* Actions */}
+          {/* ACTIONS */}
           <div className="mt-6 flex flex-col-reverse gap-3 border-t border-slate-200 pt-6 sm:flex-row sm:justify-end">
             <Link
               to="/admin/books"
@@ -410,10 +526,23 @@ function AddBook() {
 
             <button
               type="submit"
-              className="inline-flex items-center justify-center gap-2 bg-[#102022] px-5 py-3 text-xs font-bold text-white transition hover:bg-cyan-800"
+              disabled={submitting}
+              className="inline-flex items-center justify-center gap-2 bg-[#102022] px-5 py-3 text-xs font-bold text-white transition hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <Save size={15} />
-              Add Book
+              {submitting ? (
+                <>
+                  <RefreshCw
+                    size={15}
+                    className="animate-spin"
+                  />
+                  Adding Book...
+                </>
+              ) : (
+                <>
+                  <Save size={15} />
+                  Add Book
+                </>
+              )}
             </button>
           </div>
         </form>
@@ -471,6 +600,7 @@ function NumberField({
         className="mb-2 block text-xs font-bold text-slate-600"
       >
         {label}
+
         <span className="ml-1 text-cyan-700">*</span>
       </label>
 
@@ -485,6 +615,7 @@ function NumberField({
           name={name}
           type="number"
           min="0"
+          step="1"
           value={value}
           onChange={onChange}
           placeholder={placeholder}

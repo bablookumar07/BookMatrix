@@ -7,12 +7,16 @@ import {
   Mail,
 } from "lucide-react";
 
+import API from "../../services/api";
+import "./auth.css";
+
 function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
 
     const trimmedEmail = email.trim();
@@ -29,22 +33,44 @@ function ForgotPassword() {
       return;
     }
 
-    setError("");
+    try {
+      setIsLoading(true);
+      setError("");
 
-    /*
-      Backend integration will be added later.
+      const response = await API.post(
+        "/auth/forgot-password",
+        {
+          email: trimmedEmail,
+        }
+      );
 
-      Planned API:
-      POST /api/auth/forgot-password
-    */
+      if (response.data.success) {
+        setSubmitted(true);
+        return;
+      }
 
-    setSubmitted(true);
+      setError(
+        response.data.message ||
+          "Unable to process your request. Please try again."
+      );
+    } catch (error) {
+      /*
+        The backend may intentionally return a generic
+        response for security reasons, so we display
+        the server message when available.
+      */
+      setError(
+        error.response?.data?.message ||
+          "Unable to process your request. Please try again."
+      );
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <main className="auth-page">
       {/* Background */}
-
       <div className="auth-background-grid" />
 
       <div className="auth-background-glow auth-glow-one" />
@@ -82,9 +108,10 @@ function ForgotPassword() {
             </h1>
 
             <p>
-              No problem. Enter the email address connected
-              to your Libryo account and we'll help you get
-              back into your library.
+              No problem. Enter the email address
+              connected to your Libryo account and
+              we'll help you get back into your
+              library.
             </p>
 
           </div>
@@ -106,6 +133,7 @@ function ForgotPassword() {
 
             {!submitted ? (
               <>
+
                 <div className="auth-card-header">
 
                   <div className="auth-card-icon">
@@ -125,9 +153,9 @@ function ForgotPassword() {
                 </div>
 
                 <p className="auth-card-description">
-                  Enter your registered email address and
-                  we'll send you instructions to reset your
-                  password.
+                  Enter your registered email address
+                  and we'll send you instructions to
+                  reset your password.
                 </p>
 
                 <form
@@ -147,6 +175,7 @@ function ForgotPassword() {
                         error ? "has-error" : ""
                       }`}
                     >
+
                       <Mail size={18} />
 
                       <input
@@ -160,7 +189,9 @@ function ForgotPassword() {
                         }}
                         placeholder="Enter your email address"
                         autoComplete="email"
+                        disabled={isLoading}
                       />
+
                     </div>
 
                     {error && (
@@ -174,14 +205,21 @@ function ForgotPassword() {
                   <button
                     type="submit"
                     className="auth-submit"
+                    disabled={isLoading}
                   >
-                    Send reset link
-                    <ArrowRight size={17} />
+                    {isLoading
+                      ? "Sending..."
+                      : "Send reset link"}
+
+                    {!isLoading && (
+                      <ArrowRight size={17} />
+                    )}
                   </button>
 
                 </form>
 
                 <div className="auth-register">
+
                   <span>
                     Remember your password?
                   </span>
@@ -189,10 +227,13 @@ function ForgotPassword() {
                   <Link to="/login">
                     Sign in
                   </Link>
+
                 </div>
+
               </>
             ) : (
               <>
+
                 <div className="auth-success-icon">
                   <Mail size={24} />
                 </div>
@@ -217,8 +258,10 @@ function ForgotPassword() {
                 </div>
 
                 <div className="auth-form-message">
-                  The email-sending service will be connected
-                  during backend integration.
+                  Please check your inbox and follow
+                  the password reset instructions.
+                  The reset link will expire after
+                  the allowed reset period.
                 </div>
 
                 <Link
