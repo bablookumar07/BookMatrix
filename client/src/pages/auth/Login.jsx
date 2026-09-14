@@ -10,6 +10,7 @@ import {
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import "./auth.css";
+import BackButton from "../../components/common/BackButton";
 
 function LoginLogo() {
   return (
@@ -151,11 +152,8 @@ function Login() {
   const navigate = useNavigate();
   const { login } = useAuth();
 
-  const [showPassword, setShowPassword] =
-    useState(false);
-
-  const [isLoading, setIsLoading] =
-    useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   const [formData, setFormData] = useState({
     email: "",
@@ -183,20 +181,15 @@ function Login() {
     const newErrors = {};
 
     if (!formData.email.trim()) {
-      newErrors.email =
-        "Email address is required.";
+      newErrors.email = "Email address is required.";
     } else if (
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
-        formData.email
-      )
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)
     ) {
-      newErrors.email =
-        "Enter a valid email address.";
+      newErrors.email = "Enter a valid email address.";
     }
 
     if (!formData.password) {
-      newErrors.password =
-        "Password is required.";
+      newErrors.password = "Password is required.";
     }
 
     setErrors(newErrors);
@@ -213,7 +206,6 @@ function Login() {
 
     try {
       setIsLoading(true);
-
       setErrors({});
 
       const response = await login({
@@ -304,6 +296,8 @@ function Login() {
 
         {/* Right side */}
         <section className="auth-card-wrapper">
+          <BackButton />
+
           <div className="auth-card">
             <div className="auth-card-header">
               <div className="auth-card-icon">
@@ -340,9 +334,7 @@ function Login() {
 
                 <div
                   className={`auth-input-wrapper ${
-                    errors.email
-                      ? "has-error"
-                      : ""
+                    errors.email ? "has-error" : ""
                   }`}
                 >
                   <Mail size={17} />
@@ -380,9 +372,7 @@ function Login() {
 
                 <div
                   className={`auth-input-wrapper ${
-                    errors.password
-                      ? "has-error"
-                      : ""
+                    errors.password ? "has-error" : ""
                   }`}
                 >
                   <LockKeyhole size={17} />
@@ -407,8 +397,7 @@ function Login() {
                     className="password-toggle"
                     onClick={() =>
                       setShowPassword(
-                        (previous) =>
-                          !previous
+                        (previous) => !previous
                       )
                     }
                     aria-label={

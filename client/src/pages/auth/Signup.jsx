@@ -11,6 +11,7 @@ import {
 
 import API from "../../services/api";
 import "./auth.css";
+import BackButton from "../../components/common/BackButton";
 
 function Signup() {
   const navigate = useNavigate();
@@ -211,6 +212,10 @@ function Signup() {
         ===================================================== */}
 
         <section className="auth-card-wrapper">
+
+          <div className="mb-7">
+  <BackButton />
+</div>
 
           <div className="auth-card">
 

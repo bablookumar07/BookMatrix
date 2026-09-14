@@ -9,6 +9,7 @@ import {
 
 import API from "../../services/api";
 import "./auth.css";
+import BackButton from "../../components/common/BackButton";
 
 function ForgotPassword() {
   const [email, setEmail] = useState("");
@@ -128,6 +129,10 @@ function ForgotPassword() {
         ===================================================== */}
 
         <section className="auth-card-wrapper">
+         
+          <div className="mb-7">
+  <BackButton />
+</div> 
 
           <div className="auth-card">
 

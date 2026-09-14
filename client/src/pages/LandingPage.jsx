@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import BackToTop from "../components/landing/BackToTop";
 
 /* =========================================================
    LIBRYO LOGO MARK
@@ -855,7 +856,9 @@ function LandingPage() {
       </main>
 
       <Footer />
-
+      
+      <BackToTop />
+      
     </div>
   );
 }

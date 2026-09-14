@@ -1,5 +1,6 @@
 import { ArrowRight, BookOpen, ShieldCheck } from "lucide-react";
 import { Link } from "react-router-dom";
+import BackButton from "../../components/common/BackButton";
 
 const portals = [
   {
@@ -66,6 +67,11 @@ export default function LoginPortal() {
           {/* Portal selection */}
           <section className="flex items-center px-6 py-10 sm:px-10 lg:px-14 lg:py-14">
             <div className="w-full">
+
+               {/* Back button */}
+    <div className="mb-7">
+      <BackButton />
+    </div>
               <div className="mb-8">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-700">
                   Welcome back
